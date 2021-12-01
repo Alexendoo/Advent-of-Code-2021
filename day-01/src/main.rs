@@ -1,19 +1,23 @@
 use itertools::Itertools;
-use std::io::BufRead;
-use std::iter::once;
+
+fn count_increased(numbers: impl Iterator<Item = usize>) -> usize {
+    numbers.tuple_windows().filter(|(a, b)| a < b).count()
+}
 
 fn main() {
-    let input = include_bytes!("input");
+    let input = include_str!("input");
 
-    let numbers = input
+    let numbers: Vec<usize> = input
         .lines()
-        .map(|line| line.unwrap().parse::<usize>().unwrap());
+        .map(|line| line.parse().unwrap())
+        .collect();
 
-    let p1 = once(usize::MAX)
-        .chain(numbers)
+    println!("Part 1: {}", count_increased(numbers.iter().copied()));
+
+    let windows = numbers
+        .into_iter()
         .tuple_windows()
-        .filter(|(a, b)| a < b)
-        .count();
+        .map(|(a, b, c)| a + b + c);
 
-    println!("{}", p1);
+    println!("Part 2: {}", count_increased(windows));
 }
