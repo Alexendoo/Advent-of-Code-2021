@@ -1,35 +1,32 @@
-fn bingo(board: &[usize; 25], draws: &[usize]) -> bool {
-    for col in 0..5 {
-        for row in 0..5 {
-            let number = board[row * 5 + col];
-            if !draws.contains(&number) {
-                break;
-            }
-            if row == 4 {
-                return true;
-            }
-        }
-    }
+type Board = [usize; 25];
 
-    for row in 0..5 {
-        for col in 0..5 {
-            let number = board[row * 5 + col];
-            if !draws.contains(&number) {
-                break;
-            }
-            if col == 4 {
-                return true;
-            }
-        }
-    }
+fn bingo(board: &Board, draws: &[usize]) -> bool {
+    let test = |f: &dyn Fn(usize, usize) -> usize| {
+        (0..5).any(|i| {
+            (0..5).all(|j| {
+                draws.contains(&board[f(i, j)])
+            })
+        })
+    };
 
-    false
+    test(&|i, j| i * 5 + j) || test(&|i, j| j * 5 + i)
+}
+
+fn winner<'a>(boards: &'a [Board], draws: &[usize], negate: bool) -> Option<&'a Board> {
+    boards.iter().find(|board| bingo(board, draws) ^ negate)
+}
+
+fn score(board: &Board, draws: &[usize]) -> usize {
+    let sum: usize = board.iter().filter(|n| !draws.contains(n)).sum();
+    let last_called = draws.last().unwrap();
+
+    sum * last_called
 }
 
 fn main() {
     let input = include_str!("input");
 
-    let mut tokens = input.split_whitespace();
+    let mut tokens = input.split_ascii_whitespace();
 
     let draws: Vec<usize> = tokens
         .next()
@@ -42,9 +39,9 @@ fn main() {
     let mut boards = Vec::new();
     'outer: loop {
         let mut board = [0; 25];
-        for i in 0..25 {
+        for tile in &mut board {
             match numbers.next() {
-                Some(n) => board[i] = n,
+                Some(n) => *tile = n,
                 None => break 'outer,
             };
         }
@@ -52,12 +49,15 @@ fn main() {
     }
 
     for len in 0.. {
-        let draws = &draws[..len];
-        if let Some(board) = boards.iter().find(|board| bingo(board, draws)) {
-            let sum: usize = board.iter().filter(|n| !draws.contains(n)).sum();
-            let last_called = draws.last().unwrap();
+        if let Some(board) = winner(&boards, &draws[..len], false) {
+            println!("Part 1: {}", score(board, &draws[..len]));
+            break;
+        }
+    }
 
-            println!("Part 1: {}", sum * last_called);
+    for len in (0..draws.len()).rev() {
+        if let Some(board) = winner(&boards, &draws[..len], true) {
+            println!("Part 2: {}", score(board, &draws[..=len]));
             break;
         }
     }
