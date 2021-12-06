@@ -7,10 +7,7 @@ fn count_increased(numbers: impl Iterator<Item = usize>) -> usize {
 fn main() {
     let input = include_str!("input");
 
-    let numbers: Vec<usize> = input
-        .lines()
-        .map(|line| line.parse().unwrap())
-        .collect();
+    let numbers: Vec<usize> = input.lines().map(|line| line.parse().unwrap()).collect();
 
     println!("Part 1: {}", count_increased(numbers.iter().copied()));
 

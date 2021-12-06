@@ -2,11 +2,7 @@ type Board = [usize; 25];
 
 fn bingo(board: &Board, draws: &[usize]) -> bool {
     let test = |f: &dyn Fn(usize, usize) -> usize| {
-        (0..5).any(|i| {
-            (0..5).all(|j| {
-                draws.contains(&board[f(i, j)])
-            })
-        })
+        (0..5).any(|i| (0..5).all(|j| draws.contains(&board[f(i, j)])))
     };
 
     test(&|i, j| i * 5 + j) || test(&|i, j| j * 5 + i)
