@@ -9,7 +9,7 @@ fn tick(timers: &mut Timers) {
 fn main() {
     let input = include_str!("input");
 
-    let numbers: Vec<usize> = input.trim().split(',').map(|n| n.parse().unwrap()).collect();
+    let numbers = input.trim().split(',').map(|n| n.parse::<usize>().unwrap());
 
     let mut timers: Timers = Default::default();
     for timer in numbers {
@@ -20,4 +20,9 @@ fn main() {
         tick(&mut timers);
     }
     println!("Part 1: {}", timers.iter().sum::<usize>());
+
+    for _ in 0..(256 - 80) {
+        tick(&mut timers);
+    }
+    println!("Part 2: {}", timers.iter().sum::<usize>());
 }
