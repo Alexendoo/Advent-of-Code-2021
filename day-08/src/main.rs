@@ -1,18 +1,19 @@
-use std::char;
-use std::collections::BTreeMap;
 use std::io::Write;
+use std::time::Instant;
 
 fn solve(patterns: &[&str]) -> [char; 7] {
-    let mut occurences = BTreeMap::<char, usize>::new();
+    let mut occurences = [0; 7];
     for letter in patterns.iter().flat_map(|s| s.chars()) {
-        *occurences.entry(letter).or_default() += 1;
+        occurences[letter as usize - 'a' as usize] += 1;
     }
     let occurs = |n| {
-        *occurences
+        let (i, _) = occurences
             .iter()
-            .find(move |&(_, &count)| count == n)
-            .unwrap()
-            .0
+            .enumerate()
+            .find(|&(_, &count)| count == n)
+            .unwrap();
+
+        char::from_u32(i as u32 + 'a' as u32).unwrap()
     };
     let diff = |pattern_len, nots: &[char]| {
         let pattern = patterns
@@ -43,10 +44,10 @@ fn solve(patterns: &[&str]) -> [char; 7] {
 fn digit(solution: [char; 7], output: &str) -> usize {
     let segments = solution.map(|ch| output.contains(ch));
     let has = |ch| segments[ch as usize - 'a' as usize];
-    let horiz = |mut out: &mut &mut [u8], ch| {
-        write!(out, " {0}{0}{0}{0} ", if has(ch) { ch } else { '.' }).unwrap()
+    let horiz = |out: &mut &mut [u8], ch| {
+        write!(out, " {0}{0}{0}{0} ", if has(ch) { ch } else { '.' }).unwrap();
     };
-    let vert = |mut out: &mut &mut [u8], ch1, ch2| {
+    let vert = |out: &mut &mut [u8], ch1, ch2| {
         for _ in 0..2 {
             write!(
                 out,
@@ -66,7 +67,7 @@ fn digit(solution: [char; 7], output: &str) -> usize {
     vert(&mut w, 'e', 'f');
     horiz(&mut w, 'g');
 
-    let digit = match &display {
+    match &display {
         b" aaaa  \
           b    c \
           b    c \
@@ -147,15 +148,14 @@ fn digit(solution: [char; 7], output: &str) -> usize {
           .    f \
            gggg " => 9,
 
-        other => unreachable!(),
-    };
-
-    digit
+        _ => unreachable!(),
+    }
 }
 
 fn main() {
     let input = include_str!("input");
 
+    let start = Instant::now();
     let mut part_1 = 0;
     let mut part_2 = 0;
     for line in input.lines() {
@@ -167,9 +167,8 @@ fn main() {
         let outputs = &note[10..];
 
         for output in outputs {
-            match output.len() {
-                2 | 4 | 3 | 7 => part_1 += 1,
-                _ => {}
+            if matches!(output.len(), 2 | 4 | 3 | 7) {
+                part_1 += 1;
             }
         }
 
@@ -184,6 +183,8 @@ fn main() {
         part_2 += count;
     }
 
+    let elapsed = Instant::now() - start;
+    eprintln!("{:#?}", elapsed);
     println!("Part 1: {}", part_1);
     println!("Part 2: {}", part_2);
 }
