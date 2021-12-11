@@ -1,19 +1,6 @@
-use std::collections::HashSet;
+use std::iter;
 
 type Grid = Vec<Vec<u8>>;
-
-fn print(grid: &Grid) {
-    for row in grid {
-        for &energy in row {
-            if energy > 9 {
-                print!("+");
-            } else {
-                print!("{}", energy)
-            }
-        }
-        println!();
-    }
-}
 
 fn neighbours(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
     [
@@ -29,16 +16,16 @@ fn neighbours(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
     .into_iter()
 }
 
-fn flashes(grid: &mut Grid) -> usize {
+fn flashes(grid: &mut Grid) -> Option<usize> {
     const FLASH: u8 = 128;
 
-    let mut flashes = 0;
+    let mut flashes = None;
     for y in 0..grid.len() {
         for x in 0..grid[0].len() {
             let energy = &mut grid[y][x];
             if *energy > 9 && *energy < FLASH {
                 *energy = FLASH;
-                flashes += 1;
+                *flashes.get_or_insert(0) += 1;
 
                 for (nx, ny) in neighbours(x, y) {
                     if let Some(row) = grid.get_mut(ny) {
@@ -61,14 +48,7 @@ fn step(grid: &mut Grid) -> usize {
         }
     }
 
-    let mut flashed = 0;
-    loop {
-        let n = flashes(grid);
-        if n == 0 {
-            break;
-        }
-        flashed += n;
-    }
+    let flashed: usize = iter::from_fn(|| flashes(grid)).sum();
 
     for row in grid.iter_mut() {
         for energy in row.iter_mut() {
@@ -94,9 +74,16 @@ fn main() {
         })
         .collect();
 
-    let total_flashes: usize = (0..100).map(|_| step(&mut grid)).sum();
-
-    print(&grid);
-
+    let total_flashes: usize = {
+        let mut grid = grid.clone();
+        (0..100).map(|_| step(&mut grid)).sum()
+    };
     println!("Part 1: {}", total_flashes);
+
+    let target = grid.len() * grid[0].len();
+    let mut steps = 1;
+    while step(&mut grid) != target {
+        steps += 1;
+    }
+    println!("Part 2: {}", steps)
 }
