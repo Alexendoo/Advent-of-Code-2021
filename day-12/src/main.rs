@@ -1,12 +1,26 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use std::collections::HashSet;
+use std::fmt;
+use Node::*;
+
+type Edge = (Node, Node);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Node {
     Start,
     End,
     Small(&'static str),
     Big(&'static str),
 }
-use Node::*;
-type Edge = (Node, Node);
+
+impl fmt::Debug for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Start => write!(f, "start"),
+            End => write!(f, "end"),
+            Big(s) | Small(s) => write!(f, "{}", s),
+        }
+    }
+}
 
 impl Node {
     fn new(s: &'static str) -> Node {
@@ -23,33 +37,51 @@ struct Walker<'a> {
     stack: Vec<Node>,
     edges: &'a [Edge],
     finishes: usize,
+    twice: Option<Node>,
 }
 
 impl<'a> Walker<'a> {
-    fn new(edges: &'a [Edge]) -> Self {
+    fn new(edges: &'a [Edge], twice: Option<Node>) -> Self {
         Self {
             stack: vec![Start],
             edges,
             finishes: 0,
+            twice,
+        }
+    }
+
+    fn seen_twice(&self, next: Node) -> bool {
+        self.stack.iter().filter(|&&node| node == next).count() > 1
+    }
+
+    fn neigh(&self, next: Node) -> Option<Node> {
+        match next {
+            Small(_) => {
+                if Some(next) == self.twice {
+                    if self.seen_twice(next) {
+                        None
+                    } else {
+                        Some(next)
+                    }
+                } else if self.stack.contains(&next) {
+                    None
+                } else {
+                    Some(next)
+                }
+            }
+            Start => None,
+            _ => Some(next),
         }
     }
 
     fn neighbours(&self, current: Node) -> Vec<Node> {
-        fn neigh(next: Node, stack: &[Node]) -> Option<Node> {
-            match next {
-                Small(_) if stack.contains(&next) => None,
-                Start => None,
-                _ => Some(next),
-            }
-        }
-
         self.edges
             .iter()
             .filter_map(|&(left, right)| {
                 if left == current {
-                    neigh(right, &self.stack)
+                    self.neigh(right)
                 } else if right == current {
-                    neigh(left, &self.stack)
+                    self.neigh(left)
                 } else {
                     None
                 }
@@ -64,7 +96,13 @@ impl<'a> Walker<'a> {
             self.stack.push(neighbour);
 
             if neighbour == End {
-                self.finishes += 1;
+                if let Some(twice_node) = self.twice {
+                    if self.seen_twice(twice_node) {
+                        self.finishes += 1;
+                    }
+                } else {
+                    self.finishes += 1;
+                }
             } else {
                 self.walk();
             }
@@ -86,8 +124,26 @@ fn main() {
         })
         .collect();
 
-    let mut walker = Walker::new(&edges);
+    let mut walker = Walker::new(&edges, None);
     walker.walk();
 
-    println!("Part 1: {}", walker.finishes);
+    let no_repeats = walker.finishes;
+    println!("Part 1: {}", no_repeats);
+
+    let small_nodes: HashSet<Node> = edges
+        .iter()
+        .flat_map(|&(left, right)| [left, right])
+        .filter(|node| matches!(node, Small(_)))
+        .collect();
+
+    let repeats: usize = small_nodes
+        .into_iter()
+        .map(|small| {
+            let mut walker = Walker::new(&edges, Some(small));
+            walker.walk();
+            walker.finishes
+        })
+        .sum();
+
+    println!("Part 2: {}", no_repeats + repeats);
 }
