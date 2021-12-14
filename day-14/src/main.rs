@@ -1,56 +1,62 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
+use std::mem;
+use std::time::Instant;
 
 type Pair = (char, char);
-// type Pairs = HashMap<Pair, i32>;
-type Rules = HashMap<Pair, char>;
+type Pairs = FxHashMap<Pair, i64>;
+type Rules = FxHashMap<Pair, char>;
 
-// fn replace(pairs: &mut Pairs, rules: &Rules) {
-//     let mut replacements = Pairs::default();
+fn replace(pairs: &mut Pairs, rules: &Rules) {
+    let mut replacements = pairs.clone();
+    let mut change = |pair, by| *replacements.entry(pair).or_insert(0) += by;
 
-//     for (&pair, &count) in pairs.iter() {
-//         if let Some(&insertion) = rules.get(&pair) {
-//             replacements.insert(pair, -count);
-//             replacements.insert((pair.0, insertion), count);
-//             replacements.insert((insertion, pair.1), count);
-//         }
-//     }
-
-//     for (pair, count) in replacements {
-//         *pairs.entry(pair).or_insert(0) += count;
-//     }
-// }
-
-
-fn replace(polymer: &mut String, rules: &Rules) {
-    let mut i = 0;
-    while i < polymer.len() - 1 {
-        let mut chars = polymer[i..].chars();
-        let pair = (chars.next().unwrap(), chars.next().unwrap());
-
+    for (&pair, &count) in pairs.iter() {
         if let Some(&insertion) = rules.get(&pair) {
-            polymer.insert(i + 1, insertion);
-
-            i += 2;
-        } else {
-            i += 1;
+            change(pair, -count);
+            change((pair.0, insertion), count);
+            change((insertion, pair.1), count);
         }
     }
+
+    mem::swap(pairs, &mut replacements);
+}
+
+fn result(pairs: &Pairs) -> i64 {
+    fn div_ceil_2(lhs: i64) -> i64 {
+        let d = lhs / 2;
+        if lhs % 2 != 0 {
+            d + 1
+        } else {
+            d
+        }
+    }
+
+    let mut counts = FxHashMap::<char, i64>::default();
+    for (&(l, r), &count) in pairs {
+        *counts.entry(l).or_default() += count;
+        *counts.entry(r).or_default() += count;
+    }
+
+    let (_, &max) = counts.iter().max_by_key(|&(_, &v)| v).unwrap();
+    let (_, &min) = counts.iter().min_by_key(|&(_, &v)| v).unwrap();
+
+    div_ceil_2(max) - div_ceil_2(min)
 }
 
 fn main() {
+    let start = Instant::now();
     let input = include_str!("input");
 
     let (template, rules) = input.split_once("\n\n").unwrap();
 
-    // let mut pairs = Pairs::default();
-    // template
-    //     .chars()
-    //     .zip(template.chars().skip(1))
-    //     .for_each(|pair| {
-    //         *pairs.entry(pair).or_insert(0) += 1;
-    //     });
+    let mut pairs = Pairs::default();
+    template
+        .chars()
+        .zip(template.chars().skip(1))
+        .for_each(|pair| {
+            *pairs.entry(pair).or_insert(0) += 1;
+        });
 
-    let mut polymer = template.to_string();
     let rules: Rules = rules
         .lines()
         .map(|line| {
@@ -64,27 +70,18 @@ fn main() {
         })
         .collect();
 
-    for _ in 0..10 {
-        replace(&mut polymer, &rules);
-        println!("{}", polymer.len());
+    for _ in 1..=10 {
+        replace(&mut pairs, &rules);
     }
+    let part_1 = result(&pairs);
 
-    let mut counts = HashMap::<char, usize>::new();
-    for element in polymer.chars() {
-        *counts.entry(element).or_insert(0) += 1;
+    for _ in 11..=40 {
+        replace(&mut pairs, &rules);
     }
+    let part_2 = result(&pairs);
+    let elapsed = Instant::now() - start;
 
-    let max = counts.values().max().unwrap();
-    let min = counts.values().min().unwrap();
-
-    println!("Part 1: {}", max - min);
-
-    // println!("{:?}", pairs);
-
-    // for step in 1..10 {
-    //     replace(&mut pairs, &rules);
-    //     let len = pairs.values().copied().sum::<i32>() + 1;
-    //     // println!("\t{:?}", pairs);
-    //     println!("step {}\tlen {}", step, len);
-    // }
+    println!("Part 1: {}", part_1);
+    println!("Part 2: {}", part_2);
+    println!("Elapsed {:?}", elapsed);
 }
