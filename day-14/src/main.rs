@@ -1,44 +1,69 @@
-use rustc_hash::FxHashMap;
-use std::mem;
 use std::time::Instant;
 
-type Pair = (char, char);
-type Pairs = FxHashMap<Pair, i64>;
-type Rules = FxHashMap<Pair, char>;
+type Pair = usize;
+type Pairs = [Pair; 1024];
 
-fn replace(pairs: &mut Pairs, rules: &Rules) {
-    let mut replacements = pairs.clone();
-    let mut change = |pair, by| *replacements.entry(pair).or_insert(0) += by;
-
-    for (&pair, &count) in pairs.iter() {
-        if let Some(&insertion) = rules.get(&pair) {
-            change(pair, -count);
-            change((pair.0, insertion), count);
-            change((insertion, pair.1), count);
-        }
+fn pair_from_letters(a: u8, b: u8) -> Pair {
+    fn letter(byte: u8) -> usize {
+        (byte - b'A') as usize
     }
 
-    mem::swap(pairs, &mut replacements);
+    letter(a) + (letter(b) << 5)
 }
 
-fn result(pairs: &Pairs) -> i64 {
-    fn div_ceil_2(lhs: i64) -> i64 {
-        let d = lhs / 2;
-        if lhs % 2 != 0 {
-            d + 1
+#[derive(Debug)]
+struct Rule {
+    replaces: Pair,
+    with: (Pair, Pair),
+    times: usize,
+}
+
+impl Rule {
+    fn new(line: &str) -> Self {
+        if let &[l, r, .., insert] = line.as_bytes() {
+            Self {
+                replaces: pair_from_letters(l, r),
+                with: (pair_from_letters(l, insert), pair_from_letters(insert, r)),
+                times: 0,
+            }
         } else {
-            d
+            unreachable!()
         }
     }
+}
 
-    let mut counts = FxHashMap::<char, i64>::default();
-    for (&(l, r), &count) in pairs {
-        *counts.entry(l).or_default() += count;
-        *counts.entry(r).or_default() += count;
+fn replace(pairs: &mut Pairs, rules: &mut [Rule]) {
+    for rule in rules.iter_mut() {
+        rule.times = pairs[rule.replaces];
     }
 
-    let (_, &max) = counts.iter().max_by_key(|&(_, &v)| v).unwrap();
-    let (_, &min) = counts.iter().min_by_key(|&(_, &v)| v).unwrap();
+    for &Rule {
+        replaces,
+        with,
+        times,
+    } in rules.iter()
+    {
+        pairs[replaces] -= times;
+        pairs[with.0] += times;
+        pairs[with.1] += times;
+    }
+}
+
+fn result(pairs: &Pairs) -> usize {
+    fn div_ceil_2(lhs: usize) -> usize {
+        lhs / 2 + (lhs & 1)
+    }
+
+    let mut counts = [0; 32];
+
+    for (i, &count) in pairs.iter().enumerate() {
+        counts[i & 0b11111] += count;
+        counts[i >> 5] += count;
+    }
+
+    let iter = || counts.iter().copied();
+    let max = iter().max().unwrap();
+    let min = iter().filter(|&count| count > 0).min().unwrap();
 
     div_ceil_2(max) - div_ceil_2(min)
 }
@@ -49,34 +74,20 @@ fn main() {
 
     let (template, rules) = input.split_once("\n\n").unwrap();
 
-    let mut pairs = Pairs::default();
-    template
-        .chars()
-        .zip(template.chars().skip(1))
-        .for_each(|pair| {
-            *pairs.entry(pair).or_insert(0) += 1;
-        });
+    let mut pairs = [0; 1024];
+    for window in template.as_bytes().windows(2) {
+        pairs[pair_from_letters(window[0], window[1])] += 1;
+    }
 
-    let rules: Rules = rules
-        .lines()
-        .map(|line| {
-            let (l, r) = line.split_once(" -> ").unwrap();
-            let mut l_chars = l.chars();
-
-            (
-                (l_chars.next().unwrap(), l_chars.next().unwrap()),
-                r.chars().next().unwrap(),
-            )
-        })
-        .collect();
+    let mut rules: Vec<Rule> = rules.lines().map(Rule::new).collect();
 
     for _ in 1..=10 {
-        replace(&mut pairs, &rules);
+        replace(&mut pairs, &mut rules);
     }
     let part_1 = result(&pairs);
 
     for _ in 11..=40 {
-        replace(&mut pairs, &rules);
+        replace(&mut pairs, &mut rules);
     }
     let part_2 = result(&pairs);
     let elapsed = Instant::now() - start;
