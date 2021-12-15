@@ -2,16 +2,11 @@ use petgraph::algo::dijkstra;
 use petgraph::graph::{node_index, UnGraph};
 use petgraph::visit::EdgeRef;
 
-fn main() {
-    let input = include_str!("input");
+type Board = Vec<Vec<u32>>;
 
-    let board: Vec<Vec<u32>> = input
-        .lines()
-        .map(|line| line.chars().map(|ch| ch.to_digit(10).unwrap()).collect())
-        .collect();
-
-    let height = board.len();
+fn search(board: &Board) -> u32 {
     let width = board[0].len();
+    let height = board.len();
     let capacity = width * height;
 
     let mut graph = UnGraph::<u32, ()>::with_capacity(capacity, capacity * 2 - width - height);
@@ -32,14 +27,60 @@ fn main() {
         }
     }
 
+    let start = node_index(0);
     let end = node_index(capacity - 1);
 
-    let map = dijkstra(
-        &graph,
-        node_index(0),
-        Some(end),
-        |e| *graph.node_weight(e.source()).unwrap()
-    );
+    let map = dijkstra(&graph, start, Some(end), |e| {
+        *graph.node_weight(e.target()).unwrap()
+    });
 
-    println!("Part 1: {}", map[&end])
+    map[&end]
+}
+
+fn risk(tile: &mut u32) {
+    *tile = if *tile >= 9 { 1 } else { *tile + 1 }
+}
+
+fn main() {
+    let input = include_str!("input");
+
+    let board: Board = input
+        .lines()
+        .map(|line| line.chars().map(|ch| ch.to_digit(10).unwrap()).collect())
+        .collect();
+
+    let width = board[0].len();
+    let height = board.len();
+
+    println!("Part 1: {}", search(&board));
+
+    let mut expanded = board.clone();
+
+    for repeat in 1..=4 {
+        let mid = repeat * width;
+        let prev_start = mid - width;
+        let current_end = mid + width;
+
+        for row in &mut expanded {
+            row.extend_from_within(prev_start..mid);
+            for tile in &mut row[mid..current_end] {
+                risk(tile);
+            }
+        }
+    }
+
+    for repeat in 1..=4 {
+        let mid = repeat * height;
+        let prev_start = mid - height;
+        let current_end = mid + height;
+
+        expanded.extend_from_within(prev_start..mid);
+        for row in &mut expanded[mid..current_end] {
+            for tile in row {
+                risk(tile);
+            }
+        }
+    }
+
+    println!("Part 2: {}", search(&expanded));
 }
