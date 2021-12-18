@@ -68,7 +68,6 @@ fn main() {
         board[y][x] = true;
     }
 
-
     let mut fold_lines = folds.lines();
 
     fold(&mut board, fold_lines.next().unwrap());
