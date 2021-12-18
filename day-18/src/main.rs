@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 #[derive(Clone, Copy, Debug)]
 struct Element {
     value: u32,
@@ -8,33 +6,6 @@ struct Element {
     open: u32,
     /// trailing `]`s
     close: u32,
-}
-
-fn print(fish: &[Element]) {
-    let mut out = String::new();
-
-    for val in fish {
-        if val.open == 0 && !out.ends_with(',') {
-            out.push(',');
-        }
-        if val.open > 0 && out.ends_with(']') {
-            out.push(',');
-        }
-        for _ in 0..val.open {
-            out.push('[');
-        }
-
-        write!(out, "{}", val.value).unwrap();
-
-        if val.close == 0 {
-            out.push(',');
-        }
-        for _ in 0..val.close {
-            out.push(']');
-        }
-    }
-
-    println!("{}", out);
 }
 
 fn parse() -> Vec<Vec<Element>> {
@@ -139,27 +110,21 @@ fn reduce(fish: &mut Vec<Element>) {
     while explode(fish) || split(fish) {}
 }
 
-fn add(a: &mut Vec<Element>, mut b: Vec<Element>) {
-    if let ([a_start, ..], [.., b_end]) = (&mut a[..], &mut b[..]) {
-        a_start.open += 1;
-        b_end.close += 1;
+fn add(a: &mut Vec<Element>, b: &[Element]) {
+    a.extend_from_slice(b);
 
-        a.extend_from_slice(&b);
-    } else {
-        panic!("Fish too short, {:?} / {:?}", a, b);
-    }
+    a[0].open += 1;
+    a.last_mut().unwrap().close += 1;
 }
 
 fn magnitude(fish: &mut [Element]) -> u32 {
-    if let [val] = fish {
-        return val.value;
-    }
-
-    if let [start, .., end] = fish {
-        start.open -= 1;
-        end.close -= 1;
-    } else {
-        unreachable!();
+    match fish {
+        [single] => return single.value,
+        [start, .., end] => {
+            start.open -= 1;
+            end.close -= 1;
+        }
+        [] => unreachable!(),
     }
 
     let mut depth = 0;
@@ -184,14 +149,29 @@ fn magnitude(fish: &mut [Element]) -> u32 {
 }
 
 fn main() {
-    let mut res = parse()
-        .into_iter()
-        .reduce(|mut a, b| {
-            add(&mut a, b);
-            reduce(&mut a);
-            a
+    let fishes = parse();
+
+    let mut sum = fishes[0].clone();
+
+    for fish in fishes.iter().skip(1) {
+        add(&mut sum, fish);
+        reduce(&mut sum);
+    }
+
+    println!("Part 1: {}", magnitude(&mut sum));
+
+    let largest = (0..fishes.len())
+        .flat_map(|a| (0..fishes.len()).map(move |b| (a, b)))
+        .filter(|(a, b)| a != b)
+        .map(|(a, b)| {
+            let mut sum = fishes[a].clone();
+            add(&mut sum, &fishes[b]);
+            reduce(&mut sum);
+
+            magnitude(&mut sum)
         })
+        .max()
         .unwrap();
 
-    println!("Part 1: {}", magnitude(&mut res));
+    println!("Part 2: {}", largest);
 }
