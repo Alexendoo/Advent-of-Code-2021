@@ -1,12 +1,11 @@
 use nalgebra::{Rotation3, Vector3};
-use std::collections::HashSet;
+use rustc_hash::FxHashSet;
 
 type Beacon = Vector3<i32>;
 
 #[derive(Debug, Clone)]
 struct Scan {
     number: usize,
-    pos: Vector3<i32>,
     beacons: Vec<Beacon>,
 }
 
@@ -14,7 +13,6 @@ impl Scan {
     fn rotate(&self, rotation: &Rotation3<i32>) -> Scan {
         Scan {
             number: self.number,
-            pos: self.pos,
             beacons: self
                 .beacons
                 .iter()
@@ -41,11 +39,7 @@ fn parse() -> Vec<Scan> {
                 .map(|line| Beacon::from_iterator(line.split(',').map(|n| n.parse().unwrap())))
                 .collect();
 
-            Some(Scan {
-                number,
-                pos: Vector3::zeros(),
-                beacons,
-            })
+            Some(Scan { number, beacons })
         })
         .collect::<Option<Vec<_>>>()
         .unwrap()
@@ -77,35 +71,31 @@ fn transforms() -> Vec<Rotation3<i32>> {
 fn main() {
     let scans = parse();
 
-    let mut matched = vec![scans[0].clone()];
+    let mut points = FxHashSet::from_iter(scans[0].beacons.iter().copied());
+    let mut scanners = vec![Vector3::zeros()];
     let mut pending = Vec::from_iter(scans.iter().skip(1));
     let transforms = transforms();
 
     while !pending.is_empty() {
-        'source: for source in &matched {
-            for (target_idx, target) in pending.iter().enumerate() {
-                for transform in &transforms {
-                    let mut rotated = target.rotate(transform);
+        'pending: for (target_idx, target) in pending.iter().enumerate() {
+            for transform in &transforms {
+                let rotated = target.rotate(transform);
 
-                    for rotated_beacon in &rotated.beacons {
-                        for source_beacon in &source.beacons {
-                            let diff = source_beacon - rotated_beacon;
+                for rotated_beacon in &rotated.beacons {
+                    for source_beacon in &points {
+                        let diff = source_beacon - rotated_beacon;
 
-                            let count = rotated
-                                .translate_beacons(diff)
-                                .filter(|beacon| source.beacons.contains(beacon))
-                                .count();
+                        let count = rotated
+                            .translate_beacons(diff)
+                            .filter(|beacon| points.contains(beacon))
+                            .count();
 
-                            if count >= 12 {
-                                pending.swap_remove(target_idx);
-                                rotated.beacons = rotated.translate_beacons(diff).collect();
-                                rotated.pos = diff;
-                                matched.push(rotated);
+                        if count >= 12 {
+                            pending.swap_remove(target_idx);
+                            points.extend(rotated.translate_beacons(diff));
+                            scanners.push(diff);
 
-                                println!("{:>2}/{}", matched.len(), scans.len());
-
-                                break 'source;
-                            }
+                            break 'pending;
                         }
                     }
                 }
@@ -113,22 +103,12 @@ fn main() {
         }
     }
 
-    let all_beacons = matched
-        .iter()
-        .flat_map(|scan| &scan.beacons)
-        .collect::<HashSet<_>>();
-
-    println!("Part 1: {}", all_beacons.len());
+    println!("Part 1: {}", points.len());
 
     let mut largest = 0;
-    for x in &matched {
-        for y in &matched {
-            let distance = x
-                .pos
-                .iter()
-                .zip(y.pos.iter())
-                .map(|(l, r)| (l - r).abs())
-                .sum();
+    for x in &scanners {
+        for y in &scanners {
+            let distance = x.iter().zip(y).map(|(l, r)| (l - r).abs()).sum();
 
             largest = largest.max(distance);
         }
