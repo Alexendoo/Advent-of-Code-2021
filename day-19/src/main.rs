@@ -1,7 +1,11 @@
 use nalgebra::{Rotation3, Vector3};
 use rustc_hash::FxHashSet;
+use std::time::Instant;
 
 type Beacon = Vector3<i32>;
+
+trait BeaconIter: Iterator<Item = Beacon> + ExactSizeIterator {}
+impl<T: Iterator<Item = Beacon> + ExactSizeIterator> BeaconIter for T {}
 
 #[derive(Debug, Clone)]
 struct Scan {
@@ -21,7 +25,7 @@ impl Scan {
         }
     }
 
-    fn translate_beacons(&self, by: Vector3<i32>) -> impl Iterator<Item = Beacon> + '_ {
+    fn translate_beacons(&self, by: Vector3<i32>) -> impl BeaconIter + '_ {
         self.beacons.iter().map(move |beacon| beacon + by)
     }
 }
@@ -68,10 +72,30 @@ fn transforms() -> Vec<Rotation3<i32>> {
     out
 }
 
+fn atleast_twelve(mut iter: impl BeaconIter, beacons: &FxHashSet<Beacon>) -> bool {
+    let mut seen = 0;
+    while let Some(beacon) = iter.next() {
+        if beacons.contains(&beacon) {
+            seen += 1;
+
+            if seen >= 12 {
+                return true;
+            }
+        }
+
+        if iter.len() < 12 - seen {
+            break;
+        }
+    }
+
+    false
+}
+
 fn main() {
+    let start = Instant::now();
     let scans = parse();
 
-    let mut points = FxHashSet::from_iter(scans[0].beacons.iter().copied());
+    let mut beacons = FxHashSet::from_iter(scans[0].beacons.iter().copied());
     let mut scanners = vec![Vector3::zeros()];
     let mut pending = Vec::from_iter(scans.iter().skip(1));
     let transforms = transforms();
@@ -82,18 +106,15 @@ fn main() {
                 let rotated = target.rotate(transform);
 
                 for rotated_beacon in &rotated.beacons {
-                    for source_beacon in &points {
+                    for source_beacon in &beacons {
                         let diff = source_beacon - rotated_beacon;
 
-                        let count = rotated
-                            .translate_beacons(diff)
-                            .filter(|beacon| points.contains(beacon))
-                            .count();
-
-                        if count >= 12 {
+                        if atleast_twelve(rotated.translate_beacons(diff), &beacons) {
                             pending.swap_remove(target_idx);
-                            points.extend(rotated.translate_beacons(diff));
+                            beacons.extend(rotated.translate_beacons(diff));
                             scanners.push(diff);
+
+                            eprint!("{:>2}\r", pending.len());
 
                             break 'pending;
                         }
@@ -103,7 +124,7 @@ fn main() {
         }
     }
 
-    println!("Part 1: {}", points.len());
+    println!("Part 1: {}", beacons.len());
 
     let mut largest = 0;
     for x in &scanners {
@@ -115,4 +136,5 @@ fn main() {
     }
 
     println!("Part 2: {}", largest);
+    println!("Elapsed: {:?}", Instant::now() - start);
 }
