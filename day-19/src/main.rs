@@ -1,6 +1,5 @@
-use std::collections::HashSet;
-
 use nalgebra::{Rotation3, Vector3};
+use std::collections::HashSet;
 
 type Beacon = Vector3<i32>;
 
@@ -103,7 +102,7 @@ fn main() {
                                 rotated.pos = diff;
                                 matched.push(rotated);
 
-                                dbg!(pending.len());
+                                println!("{:>2}/{}", matched.len(), scans.len());
 
                                 break 'source;
                             }
@@ -120,4 +119,20 @@ fn main() {
         .collect::<HashSet<_>>();
 
     println!("Part 1: {}", all_beacons.len());
+
+    let mut largest = 0;
+    for x in &matched {
+        for y in &matched {
+            let distance = x
+                .pos
+                .iter()
+                .zip(y.pos.iter())
+                .map(|(l, r)| (l - r).abs())
+                .sum();
+
+            largest = largest.max(distance);
+        }
+    }
+
+    println!("Part 2: {}", largest);
 }
