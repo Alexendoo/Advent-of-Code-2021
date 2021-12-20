@@ -1,7 +1,22 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::mem;
+use rustc_hash::FxHashSet;
+use std::{array, mem};
 
-type Pixels = BTreeSet<(isize, isize)>;
+type Pixels = FxHashSet<(i32, i32)>;
+
+fn square((row, col): (i32, i32)) -> array::IntoIter<(i32, i32), 9> {
+    [
+        (row + 1, col + 1),
+        (row + 1, col),
+        (row + 1, col - 1),
+        (row, col + 1),
+        (row, col),
+        (row, col - 1),
+        (row - 1, col + 1),
+        (row - 1, col),
+        (row - 1, col - 1),
+    ]
+    .into_iter()
+}
 
 struct Image<'a> {
     alg: &'a [bool],
@@ -10,13 +25,13 @@ struct Image<'a> {
 }
 
 impl<'a> Image<'a> {
-    fn set(&mut self, pixel: (isize, isize), val: bool) {
+    fn set(&mut self, pixel: (i32, i32), val: bool) {
         if val ^ self.mask {
             self.pixels.insert(pixel);
         }
     }
 
-    fn has(&self, pixel: (isize, isize)) -> bool {
+    fn has(&self, pixel: (i32, i32)) -> bool {
         self.pixels.contains(&pixel) ^ self.mask
     }
 
@@ -30,30 +45,15 @@ impl<'a> Image<'a> {
 
         self.mask ^= self.alg[0];
 
-        for &(row, col) in &candidates {
-            let window = square((row, col));
-
+        for &candidate in &candidates {
             let mut num = 0;
-            for (i, &pixel) in window.iter().rev().enumerate() {
+            for (i, pixel) in square(candidate).enumerate() {
                 let bit = prev.has(pixel) as usize;
 
                 num |= bit << i;
             }
 
-            self.set((row, col), self.alg[num]);
-        }
-    }
-
-    fn print(&self, from: isize, to: isize) {
-        for row in from..to {
-            for col in from..to {
-                if self.has((row, col)) {
-                    print!("#");
-                } else {
-                    print!(".");
-                }
-            }
-            println!();
+            self.set(candidate, self.alg[num]);
         }
     }
 }
@@ -79,7 +79,7 @@ fn parse() -> (Pixels, Vec<bool>) {
             line.chars()
                 .enumerate()
                 .filter_map(move |(col, ch)| match ch {
-                    '#' => Some((row as isize, col as isize)),
+                    '#' => Some((row as i32, col as i32)),
                     _ => None,
                 })
         })
@@ -88,57 +88,8 @@ fn parse() -> (Pixels, Vec<bool>) {
     (image, enhancement)
 }
 
-fn print(img: &Pixels, from: isize, to: isize) {
-    for row in from..to {
-        for col in from..to {
-            if img.contains(&(row, col)) {
-                print!("#");
-            } else {
-                print!(".");
-            }
-        }
-        println!();
-    }
-}
-
-fn square((row, col): (isize, isize)) -> [(isize, isize); 9] {
-    [
-        (row - 1, col - 1),
-        (row - 1, col),
-        (row - 1, col + 1),
-        (row, col - 1),
-        (row, col),
-        (row, col + 1),
-        (row + 1, col - 1),
-        (row + 1, col),
-        (row + 1, col + 1),
-    ]
-}
-
-fn enhance(img: &mut Pixels, alg: &[bool]) {
-    let candidates = img.iter().copied().flat_map(square).collect::<Pixels>();
-    let copy = img.clone();
-
-    for &(row, col) in &candidates {
-        let window = square((row, col));
-
-        let mut num = 0;
-        for (i, pixel) in window.iter().rev().enumerate() {
-            let bit = copy.contains(pixel) as usize;
-
-            num |= bit << i;
-        }
-
-        if alg[num] {
-            img.insert((row, col));
-        } else {
-            img.remove(&(row, col));
-        }
-    }
-}
-
 fn main() {
-    let (mut img, alg) = parse();
+    let (img, alg) = parse();
 
     let mut image = Image {
         alg: &alg,
@@ -150,4 +101,10 @@ fn main() {
     image.enhance();
 
     println!("Part 1: {}", image.pixels.len());
+
+    for _ in 2..50 {
+        image.enhance();
+    }
+
+    println!("Part 2: {}", image.pixels.len());
 }
