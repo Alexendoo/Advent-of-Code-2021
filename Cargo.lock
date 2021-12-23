@@ -140,6 +140,9 @@ dependencies = [
 [[package]]
 name = "day-23"
 version = "0.1.0"
+dependencies = [
+ "rustc-hash",
+]
 
 [[package]]
 name = "derive_more"

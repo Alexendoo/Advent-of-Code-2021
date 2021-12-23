@@ -1,5 +1,6 @@
+use rustc_hash::FxHashMap;
 use std::cmp::Ordering::{Greater, Less};
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::{fmt, mem};
 use Frog::{A, B, C, D};
 
@@ -9,7 +10,7 @@ struct Pos {
     col: usize,
 }
 
-const TARGETS: [Pos; 15] = [
+const HALLWAY: [Pos; 7] = [
     Pos { row: 0, col: 0 },
     Pos { row: 0, col: 1 },
     Pos { row: 0, col: 3 },
@@ -17,25 +18,6 @@ const TARGETS: [Pos; 15] = [
     Pos { row: 0, col: 7 },
     Pos { row: 0, col: 9 },
     Pos { row: 0, col: 10 },
-    Pos { row: 1, col: 2 },
-    Pos { row: 1, col: 4 },
-    Pos { row: 1, col: 6 },
-    Pos { row: 1, col: 8 },
-    Pos { row: 2, col: 2 },
-    Pos { row: 2, col: 4 },
-    Pos { row: 2, col: 6 },
-    Pos { row: 2, col: 8 },
-];
-
-const DESTINATIONS: [Pos; 8] = [
-    Pos { row: 1, col: 2 },
-    Pos { row: 1, col: 4 },
-    Pos { row: 1, col: 6 },
-    Pos { row: 1, col: 8 },
-    Pos { row: 2, col: 2 },
-    Pos { row: 2, col: 4 },
-    Pos { row: 2, col: 6 },
-    Pos { row: 2, col: 8 },
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -65,28 +47,37 @@ impl Frog {
         }
     }
 
-    fn destination(self) -> [Pos; 2] {
+    fn destinations(self, height: usize) -> impl Iterator<Item = Pos> + DoubleEndedIterator {
         let col = self.destination_col();
 
-        [Pos { row: 1, col }, Pos { row: 2, col }]
+        (1..height).map(move |row| Pos { row, col })
     }
 
     fn is_destination(self, pos: Pos) -> bool {
         let col = self.destination_col();
 
-        pos.col == col && (pos.row == 1 || pos.row == 2)
+        pos.col == col && pos.row > 0
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-struct Burrow {
-    board: [[Option<Frog>; 11]; 3],
+type Board<const H: usize> = [[Option<Frog>; 11]; H];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct Burrow<const H: usize> {
+    board: Board<H>,
     energy: usize,
 }
 
-impl Burrow {
-    fn new(s: &str) -> Burrow {
-        let mut burrow = Burrow::default();
+impl<const H: usize> Burrow<H> {
+    fn room_positions(self) -> impl Iterator<Item = Pos> + Clone {
+        (1..H).flat_map(|row| [2, 4, 6, 8].map(|col| Pos { row, col }))
+    }
+
+    fn new(s: &str) -> Self {
+        let mut burrow = Burrow {
+            board: [[None; 11]; H],
+            energy: 0,
+        };
 
         let inputs = s.chars().filter_map(|ch| match ch {
             'A' => Some(A),
@@ -96,7 +87,7 @@ impl Burrow {
             _ => None,
         });
 
-        for (frog, &pos) in inputs.zip(&TARGETS[7..]) {
+        for (frog, pos) in inputs.zip(burrow.room_positions()) {
             burrow.board[pos.row][pos.col] = Some(frog);
         }
 
@@ -111,13 +102,30 @@ impl Burrow {
         self.get(pos).is_some()
     }
 
-    fn tick(mut self, source: Pos, target: Pos) -> Option<Burrow> {
+    fn deepest(self, frog: Frog) -> Option<Pos> {
+        frog.destinations(H)
+            .rfind(|&pos| self.get(pos) != Some(frog))
+    }
+
+    fn tick(mut self, source: Pos, target: Pos) -> Option<Self> {
         let frog = self.get(source)?;
 
         // Once an amphipod stops moving in the hallway, it will stay in that
         // spot until it can move into a room
         if source.row == 0 && target.row == 0 {
             return None;
+        }
+
+        if frog.is_destination(source) {
+            match self.deepest(frog) {
+                Some(pos) => {
+                    if source.row > pos.row {
+                        return None;
+                    }
+                }
+                // All in final position
+                None => return None,
+            }
         }
 
         if target.row > 0 {
@@ -127,7 +135,7 @@ impl Burrow {
                 return None;
             }
 
-            for dest in frog.destination() {
+            for dest in frog.destinations(H) {
                 if let Some(dest_frog) = self.get(dest) {
                     // ...that room contains no amphipods which do not also have
                     // that room as their own destination
@@ -138,24 +146,7 @@ impl Burrow {
             }
 
             // Should move into the lower space if it's free
-            if target.row == 1
-                && !self.occupied(Pos {
-                    row: 2,
-                    col: target.col,
-                })
-            {
-                return None;
-            }
-        }
-
-        if frog.is_destination(source) {
-            // In end spot
-            if source.row == 2 {
-                return None;
-            }
-
-            // Both in final position
-            if frog.destination().map(|pos| self.get(pos)) == [Some(frog), Some(frog)] {
+            if target != self.deepest(frog).unwrap() {
                 return None;
             }
         }
@@ -186,7 +177,7 @@ impl Burrow {
     }
 
     fn is_finished(self) -> bool {
-        for dest in DESTINATIONS {
+        for dest in self.room_positions() {
             match self.get(dest) {
                 Some(frog) => {
                     if !frog.is_destination(dest) {
@@ -200,22 +191,32 @@ impl Burrow {
         true
     }
 
-    fn solve(self, cost: &mut usize, seen: &mut HashSet<Burrow>) {
+    fn solve(self, cost: &mut usize, seen: &mut FxHashMap<Board<H>, usize>) {
         if self.energy >= *cost {
             return;
         }
 
-        if !seen.insert(self) {
-            return;
+        match seen.entry(self.board) {
+            Entry::Occupied(mut e) => {
+                if self.energy >= *e.get() {
+                    return;
+                }
+
+                e.insert(self.energy);
+            }
+            Entry::Vacant(e) => {
+                e.insert(self.energy);
+            }
         }
 
         if self.is_finished() {
-            println!("{}", cost);
             *cost = self.energy.min(*cost);
         }
 
-        for source in TARGETS {
-            for target in TARGETS {
+        let targets = self.room_positions().chain(HALLWAY);
+
+        for source in targets.clone() {
+            for target in targets.clone() {
                 if let Some(next) = self.tick(source, target) {
                     next.solve(cost, seen);
                 }
@@ -224,7 +225,7 @@ impl Burrow {
     }
 }
 
-impl fmt::Display for Burrow {
+impl<const H: usize> fmt::Display for Burrow<H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for row in self.board {
             for tile in row {
@@ -242,13 +243,32 @@ impl fmt::Display for Burrow {
 }
 
 fn main() {
-    let burrow = Burrow::new(include_str!("input"));
+    let input = include_str!("input");
+
+    let burrow = Burrow::<3>::new(input);
 
     let mut min = usize::MAX;
-    let mut seen = HashSet::new();
+    let mut seen = Default::default();
 
     burrow.solve(&mut min, &mut seen);
     println!("Part 1: {}", min);
+
+    let extended = format!(
+        "{}
+            #D#C#B#A#
+            #D#B#A#C#
+        {}",
+        &input[..41],
+        &input[42..]
+    );
+
+    let mut min = usize::MAX;
+    let mut seen = Default::default();
+
+    let extended_burrow = Burrow::<5>::new(&extended);
+    extended_burrow.solve(&mut min, &mut seen);
+
+    println!("Part 2: {}", min);
 }
 
 #[cfg(test)]
@@ -257,7 +277,7 @@ mod tests {
 
     #[test]
     fn tick() {
-        let mut burrow = Burrow::new(
+        let mut burrow = Burrow::<3>::new(
             "
             #############
             #...........#
